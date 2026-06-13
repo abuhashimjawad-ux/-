@@ -1,6 +1,9 @@
 ﻿name: Sync All Audios To Release
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
   schedule:
     - cron: "0 */12 * * *"
