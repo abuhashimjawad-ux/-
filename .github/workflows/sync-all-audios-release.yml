@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      source_url:
+        description: Direct URL to all-audios.tar.gz
+        required: false
+        default: "https://ais-dev-wtvwqvganlaqsrn2wb7gxa-841485514421.europe-west2.run.app/all-audios.tar.gz"
   schedule:
     - cron: "0 */12 * * *"
 
@@ -19,11 +24,27 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download archive
+        env:
+          DEFAULT_URL: https://ais-dev-wtvwqvganlaqsrn2wb7gxa-841485514421.europe-west2.run.app/all-audios.tar.gz
+          INPUT_URL: ${{ github.event.inputs.source_url }}
         run: |
           set -euo pipefail
-          URL="https://ais-dev-wtvwqvganlaqsrn2wb7gxa-841485514421.europe-west2.run.app/all-audios.tar.gz"
+          URL="${INPUT_URL:-$DEFAULT_URL}"
+          if [ -z "$URL" ]; then URL="$DEFAULT_URL"; fi
+          echo "Using source URL: $URL"
           curl -fL "$URL" -o all-audios.tar.gz
-          echo "FILE_SIZE=$(stat -c%s all-audios.tar.gz)" >> $GITHUB_ENV
+          # Guard against HTML error pages or placeholder files.
+          FILE_HEADER=$(xxd -p -l2 all-audios.tar.gz || true)
+          if [ "$FILE_HEADER" != "1f8b" ]; then
+            echo "Downloaded file is not a gzip archive. Header: $FILE_HEADER"
+            exit 1
+          fi
+          FILE_SIZE=$(stat -c%s all-audios.tar.gz)
+          echo "FILE_SIZE=$FILE_SIZE" >> $GITHUB_ENV
+          if [ "$FILE_SIZE" -lt 104857600 ]; then
+            echo "Downloaded file is too small (<100MB). Size: $FILE_SIZE"
+            exit 1
+          fi
           echo "FILE_SHA256=$(sha256sum all-audios.tar.gz | awk '{print $1}')" >> $GITHUB_ENV
 
       - name: Build release notes
