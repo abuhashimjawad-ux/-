@@ -1,0 +1,53 @@
+﻿name: Sync All Audios To Release
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */12 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-audio-archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download archive
+        run: |
+          set -euo pipefail
+          URL="https://ais-dev-wtvwqvganlaqsrn2wb7gxa-841485514421.europe-west2.run.app/all-audios.tar.gz"
+          curl -fL "$URL" -o all-audios.tar.gz
+          echo "FILE_SIZE=$(stat -c%s all-audios.tar.gz)" >> $GITHUB_ENV
+          echo "FILE_SHA256=$(sha256sum all-audios.tar.gz | awk '{print $1}')" >> $GITHUB_ENV
+
+      - name: Build release notes
+        run: |
+          SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $FILE_SIZE/1024/1024}")
+          {
+            echo "Automated sync from source URL."
+            echo
+            echo "Source: https://ais-dev-wtvwqvganlaqsrn2wb7gxa-841485514421.europe-west2.run.app/all-audios.tar.gz"
+            echo "Size: ${SIZE_MB} MB"
+            echo "SHA256: ${FILE_SHA256}"
+            echo "Updated (UTC): $(date -u +\"%Y-%m-%d %H:%M:%S\")"
+          } > release-notes.txt
+
+      - name: Create or update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: all-audios-latest
+          name: All Audios Latest
+          body_path: release-notes.txt
+          files: all-audios.tar.gz
+          draft: false
+          prerelease: false
+          make_latest: true
+          generate_release_notes: false
+          append_body: false
+          fail_on_unmatched_files: true
+          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
